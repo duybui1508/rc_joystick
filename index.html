@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Joystick Xe 2WD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=JetBrains+Mono:wght@500&family=Saira+Semi+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: man tay lai - 2 thanh banh kep joystick o giua, bang chinh ben duoi (dung) / ben phai (ngang) */
+:root {
+  --bg: #E8ECF0;
+  --panel: #FFFFFF;
+  --ink: #17202A;
+  --muted: #586473;
+  --line: #CBD3DC;
+  --track: #DCE2E8;
+  --accent: #E0A300;      /* vang can lai tay dieu khien RC */
+  --accent-ink: #1A1608;
+  --stop: #C8243A;
+  --ok: #1B8F5A;
+  --f-display: "Saira Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1419; --panel: #18202A; --ink: #E3E8ED; --muted: #8B98A6; --line: #2A3542;
+    --track: #222C37; --accent: #FFC53A; --accent-ink: #1A1608; --stop: #FF5468; --ok: #3CCB8B;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1419; --panel: #18202A; --ink: #E3E8ED; --muted: #8B98A6; --line: #2A3542;
+  --track: #222C37; --accent: #FFC53A; --accent-ink: #1A1608; --stop: #FF5468; --ok: #3CCB8B;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 15px/1.45 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(12px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px));
+  overscroll-behavior: none;
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.wrap { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+/* Thanh tren */
+.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; flex-direction: column; min-width: 0; margin-right: auto; }
+.brand-name { font: 700 22px/1.1 var(--f-display); letter-spacing: .01em; }
+.brand-sub { font: 500 11px/1.3 var(--f-mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.status { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
+.status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.status[data-state="busy"] .dot { background: var(--accent); }
+.status[data-state="on"] { color: var(--ink); }
+.status[data-state="on"] .dot { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+.status[data-state="err"] .dot { background: var(--stop); }
+
+.btn {
+  font: 600 15px/1 var(--f-body);
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  border-radius: 10px; padding: 11px 16px; cursor: pointer; touch-action: manipulation;
+}
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.stop {
+  width: 100%; padding: 16px; border: 0;
+  background: var(--stop); color: #fff;
+  font: 700 20px/1 var(--f-display); letter-spacing: .12em;
+}
+.btn.stop:active { filter: brightness(.9); }
+
+.banner {
+  margin: 0; padding: 12px 14px; border-radius: 10px;
+  background: color-mix(in srgb, var(--stop) 12%, var(--panel)); border: 1px solid color-mix(in srgb, var(--stop) 40%, var(--line));
+  font-size: 14px;
+}
+
+/* Bo cuc chinh */
+.layout { display: grid; gap: 16px; grid-template-columns: 1fr; }
+@media (min-width: 760px) and (orientation: landscape), (min-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+}
+.drive { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* San khau: banh trai | joystick | banh phai */
+.stage { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.wheel { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 46px; flex: none; }
+.wheel-track {
+  position: relative; width: 18px; height: 210px; border-radius: 9px;
+  background: var(--track); overflow: hidden;
+}
+.wheel-zero { position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: var(--muted); opacity: .5; }
+.wheel-fill { position: absolute; left: 0; right: 0; background: var(--accent); }
+.wheel-fill.rev { background: var(--muted); }
+.wheel-val { font: 700 16px/1 var(--f-display); font-variant-numeric: tabular-nums; }
+.wheel-name { font-size: 11px; color: var(--muted); text-align: center; line-height: 1.2; }
+
+.pad {
+  position: relative; flex: none;
+  width: min(62vw, 300px); aspect-ratio: 1; max-width: 100%;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  touch-action: none; cursor: grab;
+}
+.pad:active { cursor: grabbing; }
+.pad .lane {
+  position: absolute; top: 8%; bottom: 8%; left: 50%; transform: translateX(-50%);
+  width: 24px; border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.pad .ring { position: absolute; border-radius: 50%; border: 1px dashed var(--line); left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.pad .r1 { width: 66%; height: 66%; }
+.pad .r2 { width: 33%; height: 33%; }
+.pad .cross { position: absolute; background: var(--line); }
+.pad .cross.h { left: 6%; right: 6%; top: 50%; height: 1px; }
+.pad .cross.v { top: 6%; bottom: 6%; left: 50%; width: 1px; }
+.pad .tick { position: absolute; font: 600 11px/1 var(--f-display); color: var(--muted); letter-spacing: .08em; }
+.pad .t-up { top: 3%; left: 50%; transform: translateX(-50%); }
+.pad .t-dn { bottom: 3%; left: 50%; transform: translateX(-50%); }
+.knob {
+  position: absolute; left: 50%; top: 50%;
+  width: 36%; aspect-ratio: 1; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--accent);
+  box-shadow: 0 6px 18px rgba(0,0,0,.22), inset 0 -4px 0 rgba(0,0,0,.12);
+  transition: transform .14s ease-out;
+  pointer-events: none;
+}
+.knob.held { transition: none; }
+
+.readout {
+  display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+  font-size: 12px; color: var(--muted);
+}
+.readout code { font: 500 13px/1 var(--f-mono); color: var(--ink); background: var(--panel); border: 1px solid var(--line); padding: 6px 10px; border-radius: 7px; }
+
+/* Bang chinh */
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 16px; display: flex; flex-direction: column; gap: 16px; min-width: 0;
+}
+.panel h2 { margin: 0; font: 700 13px/1 var(--f-display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.field label { font-weight: 600; font-size: 14px; }
+.field output { font: 700 16px/1 var(--f-display); font-variant-numeric: tabular-nums; }
+.field small { color: var(--muted); font-size: 12px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; margin: 0; touch-action: manipulation; }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.switch input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+
+.log {
+  margin: 0; min-height: 3.6em; max-height: 6em; overflow: auto;
+  font: 500 12px/1.5 var(--f-mono); color: var(--muted);
+  background: var(--bg); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word;
+  -webkit-user-select: text; user-select: text;
+}
+.howto { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+
+@media (max-width: 380px) {
+  .wheel-track { height: 170px; }
+  .wheel { width: 38px; }
+  .stage { gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .knob { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <span class="brand-name">Joystick Xe 2WD</span>
+      <span class="brand-sub">STM32 · L298N · BT05 FFE1</span>
+    </div>
+    <div class="status" id="status" data-state="off" aria-live="polite"><span class="dot"></span><span id="statusText">Chưa kết nối</span></div>
+    <button id="connectBtn" class="btn primary" type="button">Kết nối</button>
+  </header>
+
+  <p id="noBle" class="banner" hidden>Trình duyệt này không có Bluetooth. Trên iPhone, cài app <b>Bluefy</b> (miễn phí) rồi mở trang này bằng Bluefy.</p>
+
+  <main class="layout">
+    <section class="drive" aria-label="Điều khiển">
+      <div class="stage">
+        <div class="wheel" id="wheelL">
+          <div class="wheel-track"><div class="wheel-fill"></div><div class="wheel-zero"></div></div>
+          <div class="wheel-val">0%</div>
+          <div class="wheel-name">Bánh<br>trái</div>
+        </div>
+
+        <div class="pad" id="pad" role="application" aria-label="Cần lái: kéo lên để tiến, sang ngang để rẽ">
+          <div class="lane" id="lane"></div>
+          <div class="ring r1"></div>
+          <div class="ring r2"></div>
+          <div class="cross h"></div>
+          <div class="cross v"></div>
+          <span class="tick t-up">TIẾN</span>
+          <span class="tick t-dn">LÙI</span>
+          <div class="knob" id="knob"></div>
+        </div>
+
+        <div class="wheel" id="wheelR">
+          <div class="wheel-track"><div class="wheel-fill"></div><div class="wheel-zero"></div></div>
+          <div class="wheel-val">0%</div>
+          <div class="wheel-name">Bánh<br>phải</div>
+        </div>
+      </div>
+
+      <div class="readout">Gửi lên xe <code id="frame">J0,0,0</code></div>
+      <button id="stopBtn" class="btn stop" type="button">DỪNG</button>
+    </section>
+
+    <section class="panel" aria-label="Cài đặt">
+      <h2>Tốc độ</h2>
+      <div class="field">
+        <div class="field-head"><label for="maxSpd">Tốc độ tối đa</label><output id="maxOut">75%</output></div>
+        <input id="maxSpd" type="range" min="30" max="100" step="1" value="75">
+        <small>Đẩy cần hết cỡ thì bánh chạy mức này.</small>
+      </div>
+      <div class="field">
+        <div class="field-head"><label for="minSpd">Mức khởi động</label><output id="minOut">35%</output></div>
+        <input id="minSpd" type="range" min="0" max="60" step="1" value="35">
+        <small>Vừa chạm cần là bánh nhảy lên mức này, để motor qua L298N không kêu mà đứng im.</small>
+      </div>
+      <div class="field">
+        <div class="field-head"><label for="steer">Độ nhạy lái</label><output id="steerOut">60%</output></div>
+        <input id="steer" type="range" min="20" max="100" step="5" value="60">
+        <small>Thấp thì rẽ nhẹ tay, dễ nắn xe đi thẳng.</small>
+      </div>
+
+      <h2>Cân bánh</h2>
+      <div class="field">
+        <div class="field-head"><label for="trim">Bù lệch</label><output id="trimOut">0</output></div>
+        <input id="trim" type="range" min="-10" max="10" step="0.5" value="0">
+        <small>Kéo sang phải = giảm bánh phải (xe đang đâm trái). Cộng thêm vào số cân đã lưu trong code.</small>
+      </div>
+      <div class="switch">
+        <label for="aRight">Kênh A (OUT1/OUT2) là bánh phải</label>
+        <input id="aRight" type="checkbox" checked>
+      </div>
+      <small style="color:var(--muted);font-size:12px;margin-top:-10px">Đẩy cần sang phải mà xe rẽ trái thì bỏ chọn ô này.</small>
+
+      <h2>Xe trả lời</h2>
+      <pre class="log" id="log">Chưa có dữ liệu.</pre>
+
+      <ol class="howto">
+        <li>Bấm <b>Kết nối</b>, chọn <b>BT05</b> trong danh sách.</li>
+        <li>Giữ cần trong <b>dải vàng ở giữa</b> thì 2 bánh chạy y hệt nhau, xe đi thẳng.</li>
+        <li>Buông tay hoặc mất kết nối quá 0,5 giây thì xe tự dừng.</li>
+      </ol>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const SVC = '0000ffe0-0000-1000-8000-00805f9b34fb';
+  const CHR = '0000ffe1-0000-1000-8000-00805f9b34fb';
+  const STEER_DEAD = 0.12;   // dai giua: lech ngang < 12% coi nhu di thang
+  const THR_DEAD = 0.05;
+  const SEND_MS = 50;        // 20 khung/giay (xe tu dung neu > 500 ms khong co khung)
+  const enc = new TextEncoder();
+  const dec = new TextDecoder();
+
+  const cfg = { max: 75, min: 35, steer: 60, trim: 0, aIsRight: true };
+  try { Object.assign(cfg, JSON.parse(localStorage.getItem('rc2wd-cfg') || '{}')); } catch (e) {}
+  const save = () => { try { localStorage.setItem('rc2wd-cfg', JSON.stringify(cfg)); } catch (e) {} };
+
+  let device = null, chr = null, busy = false;
+  let held = false, zeroBurst = 0, jx = 0, jy = 0;
+  let out = { a: 0, b: 0, l: 0, r: 0 };
+  let wakeLock = null;
+
+  const pad = $('pad'), knob = $('knob'), lane = $('lane');
+  const logEl = $('log');
+  const logLines = [];
+  function log(msg) {
+    logLines.push(msg);
+    while (logLines.length > 5) logLines.shift();
+    logEl.textContent = logLines.join('\n');
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setStatus(state, text) {
+    $('status').dataset.state = state;
+    $('statusText').textContent = text;
+    $('connectBtn').textContent = state === 'on' ? 'Ngắt' : 'Kết nối';
+    $('connectBtn').classList.toggle('primary', state !== 'on');
+  }
+
+  /* ---------- Tinh toc do 2 banh ---------- */
+  function compute() {
+    let x = 0;
+    if (Math.abs(jx) >= STEER_DEAD) x = (jx - Math.sign(jx) * STEER_DEAD) / (1 - STEER_DEAD);
+    const y = Math.abs(jy) < THR_DEAD ? 0 : jy;
+    x *= cfg.steer / 100;
+
+    let l = y + x, r = y - x;
+    const m = Math.max(1, Math.abs(l), Math.abs(r));
+    l /= m; r /= m;
+
+    const map = v => Math.abs(v) < 0.02 ? 0 : Math.sign(v) * (cfg.min + (cfg.max - cfg.min) * Math.abs(v));
+    let L = map(l), R = map(r);
+    if (cfg.trim > 0) R *= 1 - cfg.trim / 100;
+    else if (cfg.trim < 0) L *= 1 + cfg.trim / 100;
+    L = Math.max(-100, Math.min(100, Math.round(L)));
+    R = Math.max(-100, Math.min(100, Math.round(R)));
+
+    const a = cfg.aIsRight ? R : L;
+    const b = cfg.aIsRight ? L : R;
+    out = { a, b, l: L, r: R };
+    renderWheel($('wheelL'), L);
+    renderWheel($('wheelR'), R);
+    $('frame').textContent = frameText().trim();
+  }
+
+  function frameText() {
+    const { a, b } = out;
+    return `J${a},${b},${(a + b) & 255}\n`;
+  }
+
+  function renderWheel(el, v) {
+    const fill = el.querySelector('.wheel-fill');
+    const h = Math.abs(v) / 2; // % cua nua thanh
+    fill.style.height = h + '%';
+    fill.style.top = v >= 0 ? (50 - h) + '%' : '50%';
+    fill.classList.toggle('rev', v < 0);
+    el.querySelector('.wheel-val').textContent = (v > 0 ? '+' : '') + v + '%';
+  }
+
+  /* ---------- Can lai ---------- */
+  function travel() { return (pad.clientWidth - knob.offsetWidth) / 2; }
+  function sizeLane() { lane.style.width = Math.max(14, 2 * STEER_DEAD * travel()) + 'px'; }
+
+  function move(e) {
+    const rect = pad.getBoundingClientRect();
+    const R = travel();
+    let dx = e.clientX - (rect.left + rect.width / 2);
+    let dy = e.clientY - (rect.top + rect.height / 2);
+    const d = Math.hypot(dx, dy);
+    if (d > R) { dx *= R / d; dy *= R / d; }
+    knob.style.transform = `translate(-50%, -50%) translate(${dx}px, ${dy}px)`;
+    jx = dx / R; jy = -dy / R;
+    compute();
+  }
+  function release() {
+    if (!held) return;
+    held = false;
+    knob.classList.remove('held');
+    knob.style.transform = 'translate(-50%, -50%)';
+    jx = jy = 0;
+    compute();
+    zeroBurst = 4; // gui them vai khung 0,0 cho chac
+  }
+  pad.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    try { pad.setPointerCapture(e.pointerId); } catch (err) {}
+    held = true; knob.classList.add('held'); move(e);
+  });
+  pad.addEventListener('pointermove', e => { if (held) move(e); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => pad.addEventListener(t, release));
+
+  /* ---------- Bluetooth ---------- */
+  async function writeText(s) {
+    if (!chr) return;
+    busy = true;
+    try {
+      const data = enc.encode(s);
+      if (chr.writeValueWithoutResponse) await chr.writeValueWithoutResponse(data);
+      else await chr.writeValue(data);
+    } catch (e) {
+      log('Lỗi gửi: ' + (e && e.message ? e.message : e));
+    } finally {
+      busy = false;
+    }
+  }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  async function sendNow(s) {
+    for (let i = 0; i < 15 && busy; i++) await sleep(15);
+    await writeText(s);
+  }
+
+  setInterval(() => {
+    if (!chr || busy) return;
+    if (held || zeroBurst > 0) {
+      if (!held) zeroBurst--;
+      writeText(frameText());
+    }
+  }, SEND_MS);
+
+  function onNotify(ev) {
+    const text = dec.decode(ev.target.value).replace(/\r/g, '');
+    text.split('\n').map(s => s.trim()).filter(Boolean).forEach(log);
+  }
+  function onDisconnect() {
+    chr = null;
+    setStatus('err', 'Mất kết nối');
+    log('Mất kết nối với xe.');
+    releaseWake();
+  }
+
+  async function connect() {
+    if (!navigator.bluetooth) { $('noBle').hidden = false; return; }
+    try {
+      setStatus('busy', 'Đang tìm xe…');
+      device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [SVC] });
+      device.addEventListener('gattserverdisconnected', onDisconnect);
+      setStatus('busy', 'Đang kết nối…');
+      const server = await device.gatt.connect();
+      const svc = await server.getPrimaryService(SVC);
+      chr = await svc.getCharacteristic(CHR);
+      try {
+        await chr.startNotifications();
+        chr.addEventListener('characteristicvaluechanged', onNotify);
+      } catch (e) { log('Không bật được nhận phản hồi (vẫn lái được).'); }
+      setStatus('on', 'Đã kết nối · ' + (device.name || 'BT05'));
+      log('Đã kết nối ' + (device.name || 'BT05') + '.');
+      requestWake();
+    } catch (e) {
+      chr = null;
+      const msg = e && e.name === 'NotFoundError' ? 'Chưa chọn thiết bị' : 'Không kết nối được';
+      setStatus('err', msg);
+      if (e && e.name !== 'NotFoundError') log(msg + ': ' + (e.message || e));
+    }
+  }
+  async function disconnect() {
+    release();
+    if (chr) await sendNow('S');
+    try { if (device && device.gatt.connected) device.gatt.disconnect(); } catch (e) {}
+    chr = null;
+    setStatus('off', 'Chưa kết nối');
+    releaseWake();
+  }
+  $('connectBtn').addEventListener('click', () => (chr ? disconnect() : connect()));
+
+  $('stopBtn').addEventListener('click', async () => {
+    release();
+    zeroBurst = 0;
+    if (chr) await sendNow('S');
+  });
+
+  /* Giu man hinh sang khi dang lai */
+  async function requestWake() {
+    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+  }
+  function releaseWake() { try { if (wakeLock) wakeLock.release(); } catch (e) {} wakeLock = null; }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { release(); }
+    else if (chr) requestWake();
+  });
+
+  /* ---------- Cai dat ---------- */
+  function bindRange(id, key, outId, fmt) {
+    const el = $(id), o = $(outId);
+    el.value = cfg[key];
+    const show = () => { o.textContent = fmt(cfg[key]); };
+    el.addEventListener('input', () => { cfg[key] = parseFloat(el.value); show(); compute(); save(); });
+    show();
+  }
+  bindRange('maxSpd', 'max', 'maxOut', v => v + '%');
+  bindRange('minSpd', 'min', 'minOut', v => v + '%');
+  bindRange('steer', 'steer', 'steerOut', v => v + '%');
+  bindRange('trim', 'trim', 'trimOut', v => v === 0 ? '0' : (v > 0 ? 'giảm phải ' + v : 'giảm trái ' + (-v)) + '%');
+  const aRight = $('aRight');
+  aRight.checked = !!cfg.aIsRight;
+  aRight.addEventListener('change', () => { cfg.aIsRight = aRight.checked; compute(); save(); });
+
+  if (!navigator.bluetooth) $('noBle').hidden = false;
+  window.addEventListener('resize', sizeLane);
+  sizeLane();
+  compute();
+})();
+</script>
+</body>
+</html>
