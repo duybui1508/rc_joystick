@@ -291,7 +291,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
   const logLines = [];
   function log(msg) {
     logLines.push(msg);
-    while (logLines.length > 5) logLines.shift();
+    while (logLines.length > 8) logLines.shift();
     logEl.textContent = logLines.join('\n');
     logEl.scrollTop = logEl.scrollHeight;
   }
@@ -376,15 +376,37 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => pad.addEventListener(t, release));
 
   /* ---------- Bluetooth ---------- */
-  async function writeText(s) {
+  let writeMode = 'auto';   // 'nores' | 'res' | 'legacy'
+  let failCount = 0;
+  const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('quá thời gian')), ms))]);
+
+  async function rawWrite(data) {
+    if (writeMode === 'nores') return chr.writeValueWithoutResponse(data);
+    if (writeMode === 'res')   return chr.writeValueWithResponse(data);
+    return chr.writeValue(data);
+  }
+  function pickWriteMode() {
+    const p = chr.properties || {};
+    if (p.writeWithoutResponse && chr.writeValueWithoutResponse) writeMode = 'nores';
+    else if (p.write && chr.writeValueWithResponse) writeMode = 'res';
+    else writeMode = 'legacy';
+  }
+  async function writeText(s, show) {
     if (!chr) return;
     busy = true;
     try {
-      const data = enc.encode(s);
-      if (chr.writeValueWithoutResponse) await chr.writeValueWithoutResponse(data);
-      else await chr.writeValue(data);
+      await withTimeout(rawWrite(enc.encode(s)), 400);
+      failCount = 0;
+      if (show) log('→ đã gửi ' + s.trim());
     } catch (e) {
-      log('Lỗi gửi: ' + (e && e.message ? e.message : e));
+      failCount++;
+      log('Lỗi gửi (' + writeMode + '): ' + (e && e.message ? e.message : e));
+      // doi sang kieu ghi khac neu kieu hien tai khong chay
+      if (failCount >= 2) {
+        writeMode = writeMode === 'nores' ? 'res' : writeMode === 'res' ? 'legacy' : 'nores';
+        failCount = 0;
+        log('Thử kiểu ghi: ' + writeMode);
+      }
     } finally {
       busy = false;
     }
@@ -392,7 +414,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   async function sendNow(s) {
     for (let i = 0; i < 15 && busy; i++) await sleep(15);
-    await writeText(s);
+    await writeText(s, true);
   }
 
   setInterval(() => {
@@ -403,9 +425,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
     }
   }, SEND_MS);
 
+  /* Ghep cac goi 20 byte thanh dong hoan chinh */
+  let rxBuf = '';
   function onNotify(ev) {
-    const text = dec.decode(ev.target.value).replace(/\r/g, '');
-    text.split('\n').map(s => s.trim()).filter(Boolean).forEach(log);
+    rxBuf += dec.decode(ev.target.value).replace(/\r/g, '');
+    const parts = rxBuf.split('\n');
+    rxBuf = parts.pop();
+    parts.map(s => s.trim()).filter(Boolean).forEach(log);
   }
   function onDisconnect() {
     chr = null;
@@ -423,11 +449,30 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
       setStatus('busy', 'Đang kết nối…');
       const server = await device.gatt.connect();
       const svc = await server.getPrimaryService(SVC);
-      chr = await svc.getCharacteristic(CHR);
-      try {
-        await chr.startNotifications();
-        chr.addEventListener('characteristicvaluechanged', onNotify);
-      } catch (e) { log('Không bật được nhận phản hồi (vẫn lái được).'); }
+
+      /* Liet ke cac kenh trong FFE0: co module ghi o FFE1, co module ghi o FFE2 */
+      let list = [];
+      try { list = await svc.getCharacteristics(); } catch (e) { list = [await svc.getCharacteristic(CHR)]; }
+      const short = u => u.slice(4, 8).toUpperCase();
+      const props = c => {
+        const p = c.properties || {};
+        return ['read', 'write', 'writeWithoutResponse', 'notify'].filter(k => p[k]).join('+') || '?';
+      };
+      list.forEach(c => log(short(c.uuid) + ': ' + props(c)));
+
+      const canWrite  = c => c.properties && (c.properties.write || c.properties.writeWithoutResponse);
+      const canNotify = c => c.properties && c.properties.notify;
+      chr = list.find(c => short(c.uuid) === 'FFE1' && canWrite(c)) || list.find(canWrite) || list[0];
+      const notifyChr = list.find(c => short(c.uuid) === 'FFE1' && canNotify(c)) || list.find(canNotify);
+      pickWriteMode();
+      log('Gửi qua ' + short(chr.uuid) + ' kiểu ' + writeMode);
+
+      if (notifyChr) {
+        try {
+          await notifyChr.startNotifications();
+          notifyChr.addEventListener('characteristicvaluechanged', onNotify);
+        } catch (e) { log('Không bật được nhận phản hồi (vẫn lái được).'); }
+      }
       setStatus('on', 'Đã kết nối · ' + (device.name || 'BT05'));
       log('Đã kết nối ' + (device.name || 'BT05') + '.');
       requestWake();
