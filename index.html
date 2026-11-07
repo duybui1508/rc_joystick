@@ -79,6 +79,8 @@ body {
   font: 700 20px/1 var(--f-display); letter-spacing: .12em;
 }
 .btn.stop:active { filter: brightness(.9); }
+.extras { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.extras .btn { width: 100%; }
 
 .banner {
   margin: 0; padding: 12px 14px; border-radius: 10px;
@@ -222,6 +224,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
 
       <div class="readout">Gửi lên xe <code id="frame">J0,0,0</code></div>
       <button id="stopBtn" class="btn stop" type="button">DỪNG</button>
+      <div class="extras">
+        <button id="lightBtn" class="btn" type="button">Đèn pha: tự động</button>
+        <button id="senseBtn" class="btn" type="button">Đo độ sáng</button>
+      </div>
     </section>
 
     <section class="panel" aria-label="Cài đặt">
@@ -431,7 +437,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
     rxBuf += dec.decode(ev.target.value).replace(/\r/g, '');
     const parts = rxBuf.split('\n');
     rxBuf = parts.pop();
-    parts.map(s => s.trim()).filter(Boolean).forEach(log);
+    parts.map(s => s.trim()).filter(Boolean).forEach(line => {
+      log(line);
+      const m = line.match(/^DEN = (TU DONG|BAT|TAT)/);
+      if (m) $('lightBtn').textContent = 'Đèn pha: ' + ({ 'TU DONG': 'tự động', 'BAT': 'luôn bật', 'TAT': 'tắt' })[m[1]];
+    });
   }
   function onDisconnect() {
     chr = null;
@@ -498,6 +508,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
     zeroBurst = 0;
     if (chr) await sendNow('S');
   });
+  $('lightBtn').addEventListener('click', () => { if (chr) sendNow('h'); });
+  $('senseBtn').addEventListener('click', () => { if (chr) sendNow('v'); });
 
   /* Giu man hinh sang khi dang lai */
   async function requestWake() {
