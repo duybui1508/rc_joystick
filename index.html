@@ -81,6 +81,8 @@ body {
 .btn.stop:active { filter: brightness(.9); }
 .extras { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .extras .btn { width: 100%; }
+.extras .horn { grid-column: 1 / -1; padding: 15px; touch-action: none; -webkit-touch-callout: none; }
+.extras .horn.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 
 .banner {
   margin: 0; padding: 12px 14px; border-radius: 10px;
@@ -225,6 +227,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
       <div class="readout">Gửi lên xe <code id="frame">J0,0,0</code></div>
       <button id="stopBtn" class="btn stop" type="button">DỪNG</button>
       <div class="extras">
+        <button id="hornBtn" class="btn horn" type="button">Còi (giữ)</button>
         <button id="lightBtn" class="btn" type="button">Đèn pha: tự động</button>
         <button id="senseBtn" class="btn" type="button">Đo độ sáng</button>
       </div>
@@ -509,6 +512,27 @@ input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; ma
     if (chr) await sendNow('S');
   });
   $('lightBtn').addEventListener('click', () => { if (chr) sendNow('h'); });
+
+  /* Coi: giu nut thi keu, gui lai 'c' moi 1 s; nha tay gui 'x' */
+  const hornBtn = $('hornBtn');
+  let hornTimer = null;
+  function hornDown(e) {
+    e.preventDefault();
+    if (hornTimer) return;
+    try { hornBtn.setPointerCapture(e.pointerId); } catch (err) {}
+    hornBtn.classList.add('on');
+    if (chr) sendNow('c');
+    hornTimer = setInterval(() => { if (chr) sendNow('c'); }, 1000);
+  }
+  function hornUp() {
+    if (!hornTimer) return;
+    clearInterval(hornTimer); hornTimer = null;
+    hornBtn.classList.remove('on');
+    if (chr) sendNow('x');
+  }
+  hornBtn.addEventListener('pointerdown', hornDown);
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => hornBtn.addEventListener(t, hornUp));
+  hornBtn.addEventListener('contextmenu', e => e.preventDefault());
   $('senseBtn').addEventListener('click', () => { if (chr) sendNow('v'); });
 
   /* Giu man hinh sang khi dang lai */
