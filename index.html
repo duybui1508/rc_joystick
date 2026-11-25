@@ -237,7 +237,8 @@ pad.addEventListener('pointerup', releaseKnob);
 pad.addEventListener('pointercancel', releaseKnob);
 
 // Khi đang giữ cần thì gửi liên tục. Xe không nhận được lệnh quá 0,5 s sẽ tự dừng.
-setInterval(() => { if (holding) send(`J${left},${right}`); }, SEND_EVERY_MS);
+// Lệnh trước chưa gửi xong thì bỏ qua lượt này, để không bị dồn hàng (xe luôn nhận vị trí mới nhất).
+setInterval(() => { if (holding && !sending) send(`J${left},${right}`); }, SEND_EVERY_MS);
 
 /* ===================== CÁC NÚT ===================== */
 $('connectBtn').onclick = () => characteristic ? characteristic.service.device.gatt.disconnect() : connect();
