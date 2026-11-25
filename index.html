@@ -85,8 +85,8 @@
 
 <script>
 /* ===================== CẤU HÌNH ===================== */
-const SERVICE_UUID = 0xFFE0;   // dịch vụ UART của module BT05
-const CHAR_UUID    = 0xFFE1;   // kênh gửi / nhận dữ liệu
+const SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';   // dịch vụ UART của BT05 (FFE0)
+const CHAR_UUID    = '0000ffe1-0000-1000-8000-00805f9b34fb';   // kênh gửi / nhận dữ liệu (FFE1)
 const SEND_EVERY_MS = 50;      // gửi lệnh joystick 20 lần mỗi giây
 
 /* ===================== BIẾN ===================== */
@@ -117,19 +117,29 @@ async function connect() {
 
     const server  = await device.gatt.connect();
     const service = await server.getPrimaryService(SERVICE_UUID);
-    characteristic = await service.getCharacteristic(CHAR_UUID);
 
-    // Nhận chữ xe gửi về (READY, DEN = ...) để hiện lên log
-    await characteristic.startNotifications();
-    characteristic.addEventListener('characteristicvaluechanged', e => {
-      log('Xe: ' + new TextDecoder().decode(e.target.value).trim());
-    });
+    // Lấy kênh FFE1. Có module dùng kênh khác trong FFE0, khi đó lấy kênh đầu tiên ghi được.
+    const list = await service.getCharacteristics();
+    const canWrite = c => c.properties.write || c.properties.writeWithoutResponse;
+    characteristic = list.find(c => c.uuid === CHAR_UUID && canWrite(c)) || list.find(canWrite);
+    if (!characteristic) throw new Error('không thấy kênh ghi trong FFE0');
+
+    // Nhận chữ xe gửi về (READY, DEN = ...) để hiện lên log. Không bật được cũng vẫn lái được.
+    const notifyChar = list.find(c => c.properties.notify);
+    if (notifyChar) {
+      try {
+        await notifyChar.startNotifications();
+        notifyChar.addEventListener('characteristicvaluechanged', e => {
+          log('Xe: ' + new TextDecoder().decode(e.target.value).trim());
+        });
+      } catch (e) { log('Không bật được nhận phản hồi'); }
+    }
 
     $('status').textContent = 'Đã kết nối';
     $('status').className = 'on';
     $('connectBtn').textContent = 'Ngắt';
   } catch (err) {
-    log('Không kết nối được: ' + err.message);
+    log('Không kết nối được: ' + (err && err.message ? err.message : err));
     $('status').textContent = 'Chưa kết nối';
   }
 }
@@ -147,9 +157,15 @@ async function send(text) {
   for (let i = 0; i < 10 && sending; i++) await new Promise(r => setTimeout(r, 15));   // chờ lệnh trước gửi xong
   sending = true;
   try {
-    await characteristic.writeValueWithoutResponse(new TextEncoder().encode(text + '\n'));
+    const data = new TextEncoder().encode(text + '\n');
+    // Trình duyệt cũ (Bluefy) có thể chỉ có writeValue
+    if (characteristic.properties.writeWithoutResponse && characteristic.writeValueWithoutResponse) {
+      await characteristic.writeValueWithoutResponse(data);
+    } else {
+      await characteristic.writeValue(data);
+    }
   } catch (err) {
-    log('Lỗi gửi: ' + err.message);
+    log('Lỗi gửi: ' + (err && err.message ? err.message : err));
   }
   sending = false;
 }
